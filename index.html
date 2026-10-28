@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro fotográfico V15 - Agregar fotos sueltas</title>
+    <link rel="stylesheet" href="css/estilos.css">
+    <!-- Librerías para generar el archivo .docx real -->
+    <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+    <div class="ventana-app">
+        <!-- Barra de título estilo Windows -->
+        <div class="barra-titulo">
+            <span>🪶 Registro fotográfico V15 · Agregar fotos sueltas</span>
+            <div class="controles-ventana">
+                <span>—</span><span>❐</span><span>✕</span>
+            </div>
+        </div>
+
+        <!-- Barra de estado / alertas -->
+        <div id="alerta" class="alerta oculto"></div>
+
+        <!-- Barra de herramientas superior -->
+        <div class="barra-herramientas">
+            <label class="btn-win">
+                Agregar fotos / archivo
+                <input type="file" id="inputArchivo" accept="image/*" multiple hidden>
+            </label>
+            <label class="btn-win">
+                📷 Tomar foto (Celular)
+                <input type="file" id="inputCamara" accept="image/*" capture="environment" hidden>
+            </label>
+            <select id="selectProyecto" class="select-win" title="Abrir proyecto guardado">
+                <option value="">Abrir proyecto...</option>
+            </select>
+            <button type="button" id="btnNuevoProyecto" class="btn-win">Nuevo proyecto</button>
+            <button type="button" id="btnGuardarProyecto" class="btn-win">Guardar proyecto</button>
+            <button type="button" id="btnExportarWord" class="btn-win">Generar Word</button>
+            <button type="button" id="btnDevolverPendientes" class="btn-win">Devolver a pendientes</button>
+            <button type="button" id="btnEliminarFoto" class="btn-win">Eliminar foto</button>
+        </div>
+
+        <!-- Fila IA decorativa (igual a la captura) -->
+        <div class="fila-controles">
+            <select class="select-win"><option>Comparar con modelo</option></select>
+            <label>Modelo IA:</label>
+            <input type="text" class="input-win corto" value="qwen2.5vl:3b" readonly>
+            <span class="texto-gris">Guardado local en IndexedDB. Todas las propuestas requieren revisión.</span>
+        </div>
+
+        <!-- Datos de la Fiscalización (Rúbrica + Estilo de la imagen) -->
+        <input type="hidden" id="proyectoId">
+        <div class="fila-controles">
+            <label>Título del anexo:</label>
+            <input type="text" id="tituloAnexo" class="input-win" value="ANEXO 2 REGISTRO FOTOGRÁFICO">
+            <label>Código:*</label>
+            <input type="text" id="codigo" class="input-win mediano" value="PRACTICA 001">
+            <label>Fecha:*</label>
+            <input type="date" id="fecha" class="input-win mediano">
+        </div>
+
+        <div class="fila-controles">
+            <label>Razón social / Unidad:*</label>
+            <input type="text" id="establecimiento" class="input-win flex-1" placeholder="Ej: EMPRESA DE TRANSPORTES / UNIDAD DE PRÁCTICA">
+            <label>Placa(s) / Lugar:*</label>
+            <input type="text" id="lugar" class="input-win mediano" placeholder="Ej: Espacio autorizado">
+            <label>Fiscalizador:*</label>
+            <input type="text" id="fiscalizador" class="input-win mediano" placeholder="Nombre del alumno">
+        </div>
+
+        <!-- Controles de filtro y ordenamiento -->
+        <div class="fila-controles">
+            <label>Mostrar:</label>
+            <select id="filtroEstado" class="select-win">
+                <option value="Todas">Todas</option>
+                <option value="Asignada">Asignadas</option>
+                <option value="Pendiente">Pendientes</option>
+            </select>
+            <span id="resumenConteo" class="texto-conteo">0 pendientes · 0 asignadas</span>
+
+            <label style="margin-left: 15px;">Orden del anexo:</label>
+            <button type="button" id="btnSubir" class="btn-win-peq">↑ Subir</button>
+            <button type="button" id="btnBajar" class="btn-win-peq">↓ Bajar</button>
+        </div>
+
+        <!-- Modal de Vista Previa al tomar/subir foto (Obligatorio por rúbrica) -->
+        <div id="modalPrevia" class="modal-previa oculto">
+            <div class="modal-contenido">
+                <h4>Vista previa antes de incorporar al proyecto</h4>
+                <img id="imgPreviaModal" src="" alt="Vista previa">
+                <div class="fila-controles">
+                    <label>Descripción inicial:</label>
+                    <input type="text" id="descPreviaModal" class="input-win flex-1" placeholder="Escriba la descripción de la fotografía...">
+                </div>
+                <div class="fila-controles" style="justify-content: flex-end;">
+                    <button type="button" id="btnConfirmarCaptura" class="btn-win">Confirmar e incorporar</button>
+                    <button type="button" id="btnCancelarCaptura" class="btn-win">Cancelar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Área Principal Dividida: Tabla a la izquierda | Detalle a la derecha -->
+        <div class="panel-dividido">
+            <!-- Panel Izquierdo: Tabla de Fotografías -->
+            <div class="panel-izquierdo">
+                <table class="tabla-fotos">
+                    <thead>
+                        <tr>
+                            <th>Fotografía</th>
+                            <th>Fecha y hora ↑</th>
+                            <th>N.º Word</th>
+                            <th>Revisión</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaCuerpo">
+                        <!-- Filas generadas por JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Panel Derecho: Vista grande y edición de descripción -->
+            <div class="panel-derecho">
+                <div class="visor-imagen">
+                    <img id="visorFotoGrande" src="" alt="Seleccione una fotografía de la lista" class="oculto">
+                    <div id="visorVacio" class="visor-vacio">Seleccione o capture una fotografía para visualizarla aquí</div>
+                </div>
+
+                <div class="info-archivo" id="infoArchivo">
+                    Miniaturas medianas a la izquierda · La fecha registrada por la app no certifica la fecha original de la imagen.
+                </div>
+
+                <div class="bloque-edicion">
+                    <label>Descripción disponible (plantillas rápidas):</label>
+                    <div class="fila-controles">
+                        <input type="text" id="buscarPlantilla" class="input-win flex-1" placeholder="Buscar plantilla...">
+                        <button type="button" id="btnLimpiarDesc" class="btn-win">Limpiar</button>
+                    </div>
+                    <select id="selectPlantilla" class="select-win ancho-total">
+                        <option value="">-- Seleccione un texto de práctica o escriba abajo --</option>
+                        <option value="Vista general de un espacio autorizado para la práctica.">1 · Vista general de un espacio autorizado para la práctica.</option>
+                        <option value="Vista de detalle de un objeto utilizado en la demostración.">2 · Vista de detalle de un objeto utilizado en la demostración.</option>
+                        <option value="Verificación de condiciones generales en el punto de intervención.">3 · Verificación de condiciones generales en el punto de intervención.</option>
+                    </select>
+                    <span class="texto-gris">Texto del modelo cargado automáticamente. Puede modificarlo.</span>
+
+                    <label style="margin-top: 8px; display:block;">Descripción para el Word (editable):*</label>
+                    <textarea id="txtDescripcionEditable" rows="4" class="textarea-win" placeholder="Seleccione una foto y escriba o edite su descripción aquí..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
